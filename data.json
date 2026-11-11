@@ -1,0 +1,26 @@
+{
+  "filters": {
+    "size_5": {
+      "cross": [],
+      "x": []
+    },
+    "size_13": {
+      "cross": [],
+      "x": []
+    },
+    "size_25": {
+      "cross": [],
+      "x": []
+    }
+  },
+  "patterns": {
+    "size_5_1": {
+      "input": [],
+      "expected": "+"
+    },
+    "size_13_2": {
+      "input": [],
+      "expected": "x"
+    }
+  }
+}
