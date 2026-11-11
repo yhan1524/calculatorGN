@@ -373,8 +373,20 @@ def main() -> int:
             print(f"benchmark_ms.cross: {bm.get('cross')}")
             print(f"benchmark_ms.x: {bm.get('x')}")
 
+        output = {
+            "summary": {
+                "total": len(results),
+                "pass": pass_count,
+                "fail": fail_count
+            },
+            "results": results
+        }
+
+        save_json_file("result.json", output)
+
         print("=" * 50)
         print(f"TOTAL: {len(results)}, PASS: {pass_count}, FAIL: {fail_count}")
+        print("결과가 result.json 파일로 저장되었습니다.")
         return 0
 
     except Exception as e:
