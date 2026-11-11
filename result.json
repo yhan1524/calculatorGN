@@ -1,0 +1,19 @@
+{
+  "summary": {
+    "total": 2,
+    "pass": 0,
+    "fail": 2
+  },
+  "results": [
+    {
+      "case_id": "size_5_1",
+      "result": "FAIL",
+      "reason": "size_5_1.input는 비어있거나 리스트가 아닙니다."
+    },
+    {
+      "case_id": "size_13_2",
+      "result": "FAIL",
+      "reason": "size_13_2.input는 비어있거나 리스트가 아닙니다."
+    }
+  ]
+}
