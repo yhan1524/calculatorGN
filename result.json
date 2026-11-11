@@ -1,19 +1,78 @@
 {
   "summary": {
-    "total": 2,
-    "pass": 0,
-    "fail": 2
+    "total": 6,
+    "pass": 3,
+    "fail": 0,
+    "undecided": 3,
+    "fail_rate": 0.0,
+    "avg_time_ms": 273.0
   },
   "results": [
     {
-      "case_id": "size_5_1",
-      "result": "FAIL",
-      "reason": "size_5_1.input는 비어있거나 리스트가 아닙니다."
+      "case": 1,
+      "size": 5,
+      "expected": "x",
+      "predicted": "UNDECIDED",
+      "result": "UNDECIDED",
+      "cross_score": 0.9,
+      "x_score": 0.9,
+      "avg_ms": 0.01073,
+      "ops": 25
     },
     {
-      "case_id": "size_13_2",
-      "result": "FAIL",
-      "reason": "size_13_2.input는 비어있거나 리스트가 아닙니다."
+      "case": 2,
+      "size": 5,
+      "expected": "cross",
+      "predicted": "Cross",
+      "result": "PASS",
+      "cross_score": 8.9,
+      "x_score": 0.1,
+      "avg_ms": 0.01053,
+      "ops": 25
+    },
+    {
+      "case": 3,
+      "size": 13,
+      "expected": "x",
+      "predicted": "X",
+      "result": "PASS",
+      "cross_score": 0.3,
+      "x_score": 14.7,
+      "avg_ms": 0.03747,
+      "ops": 169
+    },
+    {
+      "case": 4,
+      "size": 13,
+      "expected": "cross",
+      "predicted": "UNDECIDED",
+      "result": "UNDECIDED",
+      "cross_score": 7.5,
+      "x_score": 7.5,
+      "avg_ms": 0.03731,
+      "ops": 169
+    },
+    {
+      "case": 5,
+      "size": 25,
+      "expected": "x",
+      "predicted": "UNDECIDED",
+      "result": "UNDECIDED",
+      "cross_score": 4.9,
+      "x_score": 4.9,
+      "avg_ms": 0.12982,
+      "ops": 625
+    },
+    {
+      "case": 6,
+      "size": 25,
+      "expected": "cross",
+      "predicted": "Cross",
+      "result": "PASS",
+      "cross_score": 52.9,
+      "x_score": 0.1,
+      "avg_ms": 0.14008,
+      "ops": 625
     }
   ]
 }
