@@ -1,4 +1,4 @@
-from time import perf_counter
+from time import perf_counter                       # 실행 시간을 아주 정밀하게 측정하고 싶을 때 사용(순수하게 흐른 시간만)
 
 # =========================================================
 # 1. 입력 검증
