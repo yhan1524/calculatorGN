@@ -65,6 +65,7 @@ def mac_score(p, f):
     rows, cols = sp                     # 행과 열의 크기를 각각 담음
     return sum(float(p[i][j]) * float(f[i][j]) for i in range(rows) for j in range(cols))   # 곱차계산
             # 각 위치에 곱을 먼저 한 뒤 sum으로 합한다  자료형은 실수형, 행렬 크기만큼 곱차계산을 수행
+    
 
 
 def benchmark(p, f):
