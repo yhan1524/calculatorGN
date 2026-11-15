@@ -100,7 +100,7 @@ def find_filter(filters, size, kind):
     return None
 
 
-def analyze_logic(p, f1, f2, l1="cross", l2="X"):
+def analyze_logic(p, f1, f2, l1="Cross", l2="X"):
     """
     점수 계산 및 판정 로직
     p: 패턴 / f1: 필터1 / f2: 필터2
@@ -119,7 +119,6 @@ def analyze_logic(p, f1, f2, l1="cross", l2="X"):
         res = l2
 
     return res, s1, s2, (t1 + t2) / 2, ops
-
 
 def input_matrix(size, title):
     """사용자 입력용 행렬 받기"""
@@ -171,7 +170,9 @@ def run_user_mode():
     except ValueError as e:
         print(f"분석 오류: {e}")
         return
+    print_user_result(s_a,s_b,t,ops,res)
 
+def print_user_result(s_a,s_b,t,ops,res):
     print("\n" + "=" * 50)
     print(f" - 필터 A 점수: {s_a:.4f}")
     print(f" - 필터 B 점수: {s_b:.4f}")
@@ -186,29 +187,29 @@ def run_user_mode():
     print("=" * 50)
 
 
-def run_json_mode():
-    """data.json 기반 성능 분석 모드"""
+
+def load_json_data(path="data.json"):
     try:
-        with open("data.json", "r", encoding="utf-8") as f:     # data 파일로드
-            data = json.load(f)
+        with open(path, "r", encoding="utf-8") as f:     # data 파일로드
+            return json.load(f)
     except Exception as e:
         print(f"파일 오류: {e}")
-        return
+        return None
 
-    filters = data.get("filters") or data.get("mac_filters")    # 필터 가져오기
-    cases = data.get("cases") or data.get("patterns", {})       # 패턴 가져오기, 없으면 빈 딕셔너리 반환
+    
+def get_filters_and_cases(data):
 
-    if filters is None:                                         # 필터가 없으면 오류 메시지 출력 후 종료
-        print("오류: filters 데이터가 없습니다.")
-        return
+    filters = data.get("filters")# 필터 가져오기
+    if filters is None:
+        filters = data.get("mac_filters")
 
-    if not cases:                                               # 패턴이 없으면 오류 메시지 출력 후 종료
-        print("오류: patterns(cases) 데이터가 없습니다.")
-        return
+    cases = data.get("cases")# 패턴 가져오기, 없으면 빈 딕셔너리 반환
+    if cases is None:
+        cases = data.get("patterns", {})      
+    return filters, cases
 
-    print("\n# [1] 필터 로드")
+def collect_available_sizes(filters):
     available_sizes = set()                                     # 필터 사이즈를 받아오기 위한 변수, 빈집합 생성, 집합은 중복을 자동으로 제거
-
     if isinstance(filters, dict):                               # 필터가 딕셔너리이면 키 반환
         for k in filters.keys():
             num = re.search(r"(\d+)", str(k))                   # re모듈(정수찾기) \d 숫자1글자, +1번이상연속반복 -> ()로 묶어 연속된 숫자는 전부 반환
@@ -221,68 +222,125 @@ def run_json_mode():
                     available_sizes.add(int(item["size"]))      # size의 정수형, 필터 사이즈를 반환
                 except:
                     pass
+    return available_sizes
 
+def print_loaded_filters(available_sizes):
+    print("\n# [1] 필터 로드")
     for s in sorted(available_sizes):                           # 확인된 사이즈 출력용
         print(f"✓ size_{s} 필터 로드 완료 (Cross, X)")
 
+def get_case_items(cases):
+    if isinstance(cases, dict):
+        return cases.items()
+    return enumerate(cases, 1)
+
+def analyze_case(c_id, c_data, filters):
+    p = get_mat(c_data)             # 리스트, 행렬 데이터를 반환
+    if p is None:
+        raise ValueError("패턴 행렬을 찾을 수 없습니다.")
+
+    if not isinstance(c_data, dict):                    # {} 여야 함
+        raise ValueError("케이스 형식이 dict가 아닙니다.")
+    try:
+        size = int(c_data.get("size", len(p)))                   # size가 있다면 size 키캆 사용, 없으면 행렬크기
+    except (TypeError, ValueError) :
+        raise ValueError("size 값이 올바르지 않습니다")
+    
+    exp = normalize(c_data.get("expected") or c_data.get("label"))  # expected나 label의 +,x,cross.. 등을 정규화
+    name = c_data.get("name", f"size_{size}_{c_id}")                # 케이스 이름, 없으면 동일 형태로 만듦
+    
+    f_c = find_filter(filters, size, "Cross")           # 사이즈 별 cross 필터
+    f_x = find_filter(filters, size, "X")               # 사이즈 별 x 필터
+    
+    if f_c is None or f_x is None:                      # 필터가 존재하지 않는 경우
+        raise ValueError(f"size_{size} 필터를 찾을 수 없습니다.")
+    
+    sc = mac_score(p, f_c)                              # cross 필터와 패턴의 MAC계산 수행
+    sx = mac_score(p, f_x)                              # x 필터와 패턴의 MAC 계산 수행
+    t, ops = benchmark(p, f_c)                          # 시간과 N^2 값을 반환
+    
+    if abs(sc - sx) < EPS:                              # 두 점수 차이가 작으면 동점으로 판정
+        pred = "UNDECIDED"
+    else:
+        pred = "Cross" if sc > sx else "X"              # cross 필터가 크면 Cross로 판정, 아니면 X로 판정
+    
+    res_tag = "PASS" if pred == exp else "FAIL"      # 판정결과 패턴 라벨과 일치시 pass, 아니면 fail
+
+    return {
+        "c_id": c_id,
+        "name": name,
+        "size": size,
+        "expected": exp,
+        "pred": pred,
+        "res_tag": res_tag,
+        "sc": sc,
+        "sx": sx,
+        "time_ms": t,
+        "ops": ops,
+    }
+
+def print_case_result(result):
+    print(f"\n- {result['name']} ---")                            # 패턴 이름 출력
+    print(f"Cross 점수: {result['sc']}")                          # Cross 필터와 일치정도
+    print(f"X 점수: {result['sx']}")                              # X 필터와 일치정도
+    print(f"판정: {result['pred']} | expected: {result['expected']} | {result['res_tag']}")
+
+def update_perf_map(perf_map, size, time_ms, ops):
+    """성능기록저장"""
+    if size not in perf_map:                            # size 라는 키가 없으면 만들기
+        perf_map[size] = {"times": [], "ops": ops}      # 실행시간 저장용 빈 리스트, 연산횟수 N^2
+    perf_map[size]["times"].append(time_ms)                   # [size]의 times리스트에 실행시간 추가
+
+def handle_case_error(c_id, error):         
+    print(f"⚠ {c_id} 처리 중 오류: {error}")           # 오류가 난 케이스만 건너 뛰고 실행하도록 처리
+
+def run_json_mode():
+    """data.json 기반 성능 분석 모드"""
+    data = load_json_data("data.json")
+    if data is None:
+        return
+    filters, cases = get_filters_and_cases(data)
+
+    if filters is None:                                         # 필터가 없으면 오류 메시지 출력 후 종료
+        print("오류: filters 데이터가 없습니다.")
+        return
+
+    if not cases:                                               # 패턴이 없으면 오류 메시지 출력 후 종료
+        print("오류: patterns(cases) 데이터가 없습니다.")
+        return
+    available_sizes = collect_available_sizes(filters)
+    print_loaded_filters(available_sizes)
+    
     print("\n# [2] 패턴 분석 (라벨 정규화 적용)")
 
     perf_map = {}                                               # 크기별 성능 기록 저장
     pass_cnt, fail_cnt = 0, 0                                   # P/F 카운트
     failed_details = []                                         # 실패 이유 저장
 
-    case_items = cases.items() if isinstance(cases, dict) else enumerate(cases, 1)
-                # 케이스가 딕셔너리면 cases의 값을 키와 함께 꺼냄, 리스트면 번호부여(1부터시작), 하나씩 꺼냄
 
-    for c_id, c_data in case_items:         # 키(인덱스), 데이터 in 케이스(패턴)
+    for c_id, c_data in get_case_items(cases):         # 키(인덱스), 데이터 in 케이스(패턴)
         try:
-            p = get_mat(c_data)             # 리스트, 행렬 데이터를 반환
-            if p is None:
-                raise ValueError("패턴 행렬을 찾을 수 없습니다.")
+            result = analyze_case(c_id, c_data, filters)
+            print_case_result(result)
 
-            if not isinstance(c_data, dict):                    # {} 여야 함
-                raise ValueError("케이스 형식이 dict가 아닙니다.")
-
-            size = c_data.get("size", len(p))                   # size가 있다면 size 키캆 사용, 없으면 행렬크기
-            exp = normalize(c_data.get("expected") or c_data.get("label"))  # expected나 label의 +,x,cross.. 등을 정규화
-            name = c_data.get("name", f"size_{size}_{c_id}")                # 케이스 이름, 없으면 동일 형태로 만듦
-
-            f_c = find_filter(filters, size, "cross")           # 사이즈 별 cross 필터
-            f_x = find_filter(filters, size, "x")               # 사이즈 별 x 필터
-
-            if f_c is None or f_x is None:                      # 필터가 존재하지 않는 경우
-                raise ValueError(f"size_{size} 필터를 찾을 수 없습니다.")
-
-            sc = mac_score(p, f_c)                              # cross 필터와 패턴의 MAC계산 수행
-            sx = mac_score(p, f_x)                              # x 필터와 패턴의 MAC 계산 수행
-            t, ops = benchmark(p, f_c)                          # 시간과 N^2 값을 반환
-
-            if abs(sc - sx) < EPS:                              # 두 점수 차이가 작으면 동점으로 판정
-                pred = "UNDECIDED"
-            else:
-                pred = "Cross" if sc > sx else "X"              # cross 필터가 크면 Cross로 판정, 아니면 X로 판정
-
-            res_tag = "PASS" if pred == exp else "FAIL"      # 판정결과 패턴 라벨과 일치시 pass, 아니면 fail
-
-            print(f"\n- {name} ---")                            # 패턴 이름 출력
-            print(f"Cross 점수: {sc}")                          # Cross 필터와 일치정도
-            print(f"X 점수: {sx}")                              # X 필터와 일치정도
-            print(f"판정: {pred} | expected: {exp} | {res_tag}")
-
-            if res_tag == "PASS":
+            if result["res_tag"] == "PASS":
                 pass_cnt += 1
             else:                                               # 판정 불일치와, 동점도 F
                 fail_cnt += 1
-                reason = "동점(UNDECIDED) 처리 규칙에 따라 FAIL" if pred == "UNDECIDED" else "판정 불일치"
-                failed_details.append(f"- {name}: {reason}")    # 실패 케이스 정리용
+                reason = (
+                    "동점(UNDECIDED) 처리 규칙에 따라 FAIL" 
+                    if result["pred"] == "UNDECIDED" 
+                    else "판정 불일치"
+                )
+                failed_details.append(f"- {result['name']}: {reason}")    # 실패 케이스 정리용
+            update_perf_map(perf_map, result["size"],result["time_ms"],result["ops"])
+        except Exception as e:
+            handle_case_error(c_id, e)
 
-            if size not in perf_map:                            # size 라는 키가 없으면 만들기
-                perf_map[size] = {"times": [], "ops": ops}      # 실행시간 저장용 빈 리스트, 연산횟수 N^2
-            perf_map[size]["times"].append(t)                   # [size]의 times리스트에 실행시간 추가
+    print_perf_table(perf_map)
+    print_result_summary(pass_cnt, fail_cnt, failed_details)
 
-        except Exception as e:                                  # 오류가 난 케이스만 건너 뛰고 실행하도록 처리
-            print(f"⚠ {c_id} 처리 중 오류: {e}")
-
+def print_perf_table(perf_map):
     print("\n# [3] 성능 분석 (평균/10회)")
     print(f"{'크기':<10} {'평균 시간(ms)':<15} {'연산 횟수':<10}")      
     print("-" * 40)
@@ -291,6 +349,7 @@ def run_json_mode():
         avg_t = sum(perf_map[s]["times"]) / len(perf_map[s]["times"])   # 순서대로 평균계산
         print(f"{s}×{s:<8} {avg_t:<15.6f} {perf_map[s]['ops']:<10}")    # 평균, 연산시간 출력
 
+def print_result_summary(pass_cnt, fail_cnt, failed_details):
     print("\n#---------------------------------------")
     print("# [4] 결과 요약")
     print(f"총 테스트: {pass_cnt + fail_cnt}개")

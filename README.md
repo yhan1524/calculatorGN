@@ -52,12 +52,15 @@ MAC 연산은 소수점 계산을 포함하므로 `1e-9` 크기의 허용 오차
 ## 4. `data.json` 구성 및 규칙
 
 ### 4-1. 필터 키 네이밍 규칙
-필터 키는 `filters`나 `mac_filters`로 저장해야 한다
-- `size` + `숫자` 형식으로 구분하여야 한다
+필터 키는 `filters`나 `mac_filters`로 저장해야 합니다
+- `size` + `숫자` 형식으로 구분하여야 합니다
 
 ### 4-2. 행렬 데이터 인식
-패턴 키는 `cases` 나 `patterns` 로 저장해야 한다
+패턴 키는 `cases` 나 `patterns` 로 저장해야 합니다
 - `matrix`, `data`, `input`, `pattern`
+
+### 4-3. 데이터 크기
+해당 코드는 N^2에서 동작 확인을 하고자 N x N 형태에서만 동작합니다
 
 ---
 
@@ -87,9 +90,9 @@ MAC 연산은 소수점 계산을 포함하므로 `1e-9` 크기의 허용 오차
 3) A,B의 값이 같은 경우
 ```bash
 ==================================================
- - 필터 A 점수: 5.0000
- - 필터 B 점수: 5.0000
- - 평균 연산 시간: 0.002525 ms
+ - 필터 A 점수: 1.0000
+ - 필터 B 점수: 1.0000
+ - 평균 연산 시간: 0.001975 ms
  - 총 연산 횟수: 9 (N^2)
  - 판정: 판정 불가(|A-B| < 1e-9)
 ==================================================
@@ -115,7 +118,7 @@ X 점수: 0.9
 - size_5_size_5_2 ---
 Cross 점수: 8.9
 X 점수: 0.1
-판정: Cross | expected: CROSS | PASS
+판정: Cross | expected: Cross | PASS
 
 - size_13_size_13_1 ---
 Cross 점수: 0.3
@@ -125,7 +128,7 @@ X 점수: 14.7
 - size_13_size_13_2 ---
 Cross 점수: 7.5
 X 점수: 7.5
-판정: UNDECIDED | expected: CROSS | FAIL
+판정: UNDECIDED | expected: Cross | FAIL
 
 - size_25_size_25_1 ---
 Cross 점수: 4.9
@@ -135,14 +138,14 @@ X 점수: 4.9
 - size_25_size_25_2 ---
 Cross 점수: 52.9
 X 점수: 0.1
-판정: Cross | expected: CROSS | PASS
+판정: Cross | expected: Cross | PASS
 
 # [3] 성능 분석 (평균/10회)
 크기         평균 시간(ms)       연산 횟수     
 ----------------------------------------
-5×5        0.003605        25        
-13×13       0.012530        169       
-25×25       0.036225        625       
+5×5        0.003945        25        
+13×13       0.012670        169       
+25×25       0.042085        625       
 
 #---------------------------------------
 # [4] 결과 요약
@@ -159,24 +162,195 @@ X 점수: 0.1
 
 
 ---
-
-## 6. 확장 및 최적화 가이드
-
-### 6-1. 새 라벨 추가 절차
-새로운 패턴(예: `Circle`)을 추가하려면 다음 단계를 따르세요.
-1. `normalize()` 함수에 새 라벨 매핑 추가 (예: `if s == "o": return "circle"`)
-2. `data.json`의 `filters`에 해당 크기의 `circle` 필터 행렬 추가
-3. `analyze_logic()` 또는 `run_json_mode()`에서 비교 대상 필터에 `circle` 로직 반영
-
-### 6-2. 대규모 데이터 처리 최적화 전략
-데이터 크기($N$)나 케이스 수($M$)가 늘어날 경우 아래 전략을 권장합니다.
-- **블록화(Blocking)**: 행렬을 작은 블록 단위로 나누어 CPU 캐시 효율 극대화
-- **병렬화**: `multiprocessing`을 이용해 여러 패턴을 동시에 연산
-- **벡터화**: 순수 Python 루프 대신 NumPy와 같은 라이브러리를 사용하여 SIMD 연산 활용
+## 6. 새 라벨 추가 절차
+좋아요.  
+아래처럼 바꾸면 **3개 라벨(Cross / X / Triangle)** 용으로 확장할 수 있습니다.  
+핵심은 **“각 라벨 점수를 모두 계산해서 가장 큰 라벨을 선택”**하는 방식입니다.
 
 ---
 
-## 7. CPU vs NPU 특성 비교
+### 6-1) 라벨 정규화 수정
+
+```python
+def normalize(label):
+    """라벨 정규화"""
+    if label is None:
+        return ""
+    s = str(label).strip().lower()
+
+    if s in ["+", "cross", "c", "plus"]:
+        return "Cross"
+    if s in ["x", "diag"]:
+        return "X"
+    if s in ["triangle", "tri", "t"]:
+        return "Triangle"
+    if s == "undecided":
+        return "UNDECIDED"
+
+    return s
+```
+
+---
+
+### 6-2) 3개 라벨 목록 추가
+
+```python
+LABELS = ["Cross", "X", "Triangle"]
+```
+
+---
+
+### 6-3) 다중 분류용 판정 함수 추가
+
+기존 `analyze_case()` 대신 아래처럼 쓰면 됩니다.
+
+```python
+def analyze_case_3label(c_id, c_data, filters):
+    p = get_mat(c_data)
+    if p is None:
+        raise ValueError("패턴 행렬을 찾을 수 없습니다.")
+
+    if not isinstance(c_data, dict):
+        raise ValueError("케이스 형식이 dict가 아닙니다.")
+
+    try:
+        size = int(c_data.get("size", len(p)))
+    except (TypeError, ValueError):
+        raise ValueError("size 값이 올바르지 않습니다.")
+
+    exp = normalize(c_data.get("expected") or c_data.get("label"))
+    name = c_data.get("name", f"size_{size}_{c_id}")
+
+    scores = {}
+    times = {}
+
+    # 각 라벨별 점수 계산
+    for label in LABELS:
+        f = find_filter(filters, size, label)
+        if f is None:
+            raise ValueError(f"size_{size}의 {label} 필터를 찾을 수 없습니다.")
+
+        scores[label] = mac_score(p, f)
+        times[label], ops = benchmark(p, f)
+
+    # 최고 점수 찾기
+    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    best_label, best_score = sorted_scores[0]
+
+    # 동점 처리
+    if len(sorted_scores) >= 2 and abs(sorted_scores[0][1] - sorted_scores[1][1]) < EPS:
+        pred = "UNDECIDED"
+    else:
+        pred = best_label
+
+    res_tag = "PASS" if pred == exp else "FAIL"
+
+    return {
+        "c_id": c_id,
+        "name": name,
+        "size": size,
+        "expected": exp,
+        "pred": pred,
+        "res_tag": res_tag,
+        "scores": scores,
+        "time_ms": sum(times.values()) / len(times),   # 3개 평균 시간
+        "ops": ops,
+    }
+```
+
+---
+
+### 6-4) 출력 함수 수정
+
+기존 2개 점수 출력 대신, 라벨별로 모두 출력하도록 바꾸세요.
+
+```python
+def print_case_result(result):
+    print(f"\n- {result['name']} ---")
+    for label in LABELS:
+        print(f"{label} 점수: {result['scores'][label]}")
+    print(f"판정: {result['pred']} | expected: {result['expected']} | {result['res_tag']}")
+```
+
+---
+
+### 6-5) `run_json_mode()`에서 호출 함수만 교체
+
+기존:
+
+```python
+result = analyze_case(c_id, c_data, filters)
+```
+
+변경:
+
+```python
+result = analyze_case_3label(c_id, c_data, filters)
+```
+
+나머지 흐름은 거의 그대로 써도 됩니다.
+
+---
+
+### 6-6) `print_perf_table()`는 그대로 써도 되지만, 시간은 3개 평균입니다
+
+지금은 `update_perf_map(perf_map, size, time_ms, ops)` 형태니까 그대로 가능해요.  
+다만 `time_ms`는 **세 라벨 평균값**이 들어갑니다.
+
+---
+
+### 6-7) JSON 데이터 구조도 3개 라벨을 포함해야 함
+
+예시 형태는 이런 느낌입니다.
+
+```json
+{
+  "filters": {
+    "size_3": {
+      "Cross": [[...], [...], [...]],
+      "X": [[...], [...], [...]],
+      "Triangle": [[...], [...], [...]]
+    }
+  },
+  "cases": [
+    {
+      "name": "case1",
+      "size": 3,
+      "expected": "Triangle",
+      "pattern": [[...], [...], [...]]
+    }
+  ]
+}
+```
+
+---
+
+### 6-8) 최소 수정 요약
+1. `normalize()`에 `Triangle` 추가  
+2. `LABELS = ["Cross", "X", "Triangle"]` 추가  
+3. `analyze_case()`를 `analyze_case_3label()`로 교체  
+4. `print_case_result()`를 라벨 3개 출력형으로 수정  
+5. `run_json_mode()`에서 새 함수 호출
+
+---
+
+## 7. 대규모 데이터 처리 최적화 전략
+
+| 전략 | 핵심 아이디어 | 효과 |
+|---|---|---|
+| 1. 필터 미리 맵으로 만들기 | `find_filter()`를 매번 탐색하지 않고 `(size, label)`로 딕셔너리화 | 탐색 속도 향상 |
+| 2. 중복 계산 제거 | 같은 행렬의 크기, 정규화, 점수를 여러 번 다시 계산하지 않기 | CPU 절약 |
+| 3. 점수 계산 최소화 | `sorted()` 대신 최고값만 유지 | 불필요한 정렬 비용 제거 |
+| 4. 메모리 절약 | 결과를 모두 쌓지 말고 처리 후 바로 저장/출력 | RAM 사용 감소 |
+| 5. 출력 최소화 | 대량 데이터에서 매번 자세히 출력하지 않기 | I/O 병목 감소 |
+| 6. 예외처리 최소 범위화 | 꼭 필요한 곳만 `try-except` 사용 | 불필요한 비용과 혼란 감소 |
+| 7. 로컬 변수 사용 | 반복문 안에서 전역 접근 줄이기 | 미세하지만 누적 성능 향상 |
+| 8. 조기 종료 | 이미 최적 판정이 확정되면 더 이상 계산하지 않기 | 평균 실행시간 감소 |
+
+---
+
+
+## 8. CPU vs NPU 특성 비교
 
 본 시뮬레이터는 소프트웨어(CPU)로 동작하지만, 실제 NPU 하드웨어와의 차이점은 다음과 같습니다.
 
@@ -188,7 +362,21 @@ X 점수: 0.1
 
 ---
 
-## 8. 예외 처리 안내
+## 9. 예외 처리 내역
+
+| 함수/구간 | 발생 가능 예외·문제 | 처리 방식 | 효과 |
+|---|---|---|---|
+| `input()` 루프 / JSON 모드 | `EOFError` | `try-except EOFError`로 잡아서 종료 | 입력이 끝나도 프로그램이 갑자기 멈추지 않음 |
+| `analyze_case()` / `analyze_case_3label()` | `c_data`가 `dict`가 아님 | `isinstance(c_data, dict)` 검사 후 `ValueError` 발생 | 잘못된 케이스 형식을 바로 확인 가능 |
+| `analyze_case()` / `analyze_case_3label()` | 패턴 행렬이 없음 | `get_mat(c_data)` 결과가 `None`이면 `ValueError` 발생 | 행렬 누락을 명확히 알 수 있음 |
+| `size` 추출 부분 | `int()` 변환 실패 (`TypeError`, `ValueError`) | `try-except (TypeError, ValueError)` | `size` 값이 비정상일 때 원인 파악 가능 |
+| `find_filter()` 사용 부분 | 원하는 필터를 못 찾음 | `f is None`이면 `ValueError` 발생 | JSON에 필터가 빠졌는지 바로 확인 가능 |
+| `normalize()` | `label`이 `None` | `None`이면 빈 문자열 반환 | 문자열 메서드 오류 방지 |
+| 필터/데이터 탐색 | `None`과 빈 값 구분 필요 | `if x is None:` 방식 사용 | 빈 리스트/딕셔너리와 “없음”을 구분 가능 |
+| 성능 집계/보조 처리 | 불필요하게 넓은 예외 처리 | `except (TypeError, ValueError)`처럼 구체화 | 디버깅이 쉬워짐 |
+
+---
+
 - **입력 오류**: 사용자 모드에서 행/열 개수가 맞지 않거나 숫자가 아닌 경우 에러 메시지와 함께 재입력을 요구합니다.
 ```bash
 --- 입력 패턴 입력 ---
