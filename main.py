@@ -7,7 +7,7 @@ REPEAT = 10
 USER_SIZE = 3           # 사용자 입력값 변경시 반영
 
 
-def normalize(label):
+def normalize(label):   
     """라벨 정규화: +/cross/plus -> cross, x/diag -> x"""
     if label is None:
         return ""
@@ -19,13 +19,13 @@ def normalize(label):
     return "UNDECIDED" if s == "undecided" else s
 
 
-def get_mat(obj):
+def get_mat(obj):   
     """dict/list에서 행렬 추출"""
-    if isinstance(obj, list):       # 리스트형이면 그대로 출력, 각 데이터가 딕셔너리{}형으로 저장되기 때문임
+    if isinstance(obj, list):       # 리스트형이면 그대로 반환
         return obj
-    if isinstance(obj, dict):       # 딕셔너리의 행렬 데이터를 찾아 꺼냄
+    if isinstance(obj, dict):       # 딕셔너리형이면 키값이 matrix, data, input, pattern 중 하나인 경우 반환
         for k in ["matrix", "data", "input", "pattern"]:
-            if k in obj and isinstance(obj[k], list):
+            if k in obj and isinstance(obj[k], list):       # 입력된 데이터는 리스트형이여야함
                 return obj[k]
     return None
 
@@ -49,12 +49,12 @@ def mat_shape(mat):     # mat[][] == rows[][]
 
 
 def mac_score(p, f):
-    """패턴과 필터의 MAC score 계산"""
+    """패턴과 필터의 합성곱 계산"""
     if p is None or f is None:
         raise ValueError("패턴 또는 필터가 None입니다.")
 
     sp = mat_shape(p)           # 패턴
-    sf = mat_shape(f)           # 필터(A, B)
+    sf = mat_shape(f)           # 필터 
 
     if sp is None or sf is None:        # 정사각형 판정을 받았는지
         raise ValueError("행렬 형식이 올바르지 않습니다.")
@@ -93,7 +93,7 @@ def find_filter(filters, size, kind):
 
     elif isinstance(filters, list):                     # 필터 값이 리스트면
         for item in filters:            
-            if not isinstance(item, dict):              # 각 항목이 딕셔너리가 아니면 none [{"size": 3, "labal": "x ...},{...}]
+            if not isinstance(item, dict):              # 각 항목이 딕셔너리가 아니면 건너뜀
                 continue                                
             if item.get("size") == size and normalize(item.get("label")) == target:     # 크기와 kind가 같으면
                 return get_mat(item)                                                    # 그 행렬을 반환
@@ -103,7 +103,7 @@ def find_filter(filters, size, kind):
 
 def analyze_logic(p, f1, f2, l1="Cross", l2="X"):
     """
-    점수 계산 및 판정 로직
+    사용자 입력 모드에서 패턴과 두 필터를 비교하여 점수와 시간을 측정하고 판정을 내림
     p: 패턴 / f1: 필터1 / f2: 필터2
     """
     s1 = mac_score(p, f1)   # A 필터 점수
@@ -202,11 +202,11 @@ def get_filters_and_cases(data):
 
     filters = data.get("filters")# 필터 가져오기
     if filters is None:
-        filters = data.get("mac_filters")
+        filters = data.get("mac_filters")   # filters 키가 없으면 mac_filters 키를 가져옴
 
-    cases = data.get("cases")# 패턴 가져오기, 없으면 빈 딕셔너리 반환
+    cases = data.get("cases")
     if cases is None:
-        cases = data.get("patterns", {})      
+        cases = data.get("patterns", {})    # patterns 키가 없으면 빈 딕셔너리 반환  
     return filters, cases
 
 def collect_available_sizes(filters):
@@ -227,7 +227,7 @@ def collect_available_sizes(filters):
 
 def print_loaded_filters(available_sizes):
     print("\n# [1] 필터 로드")
-    for s in sorted(available_sizes):                           # 확인된 사이즈 출력용
+    for s in sorted(available_sizes):                           # 확인된 사이즈 출력용, 라벨에서 먼저 마주치는 정수반환
         print(f"✓ size_{s} 필터 로드 완료 (Cross, X)")
 
 def get_case_items(cases):
@@ -236,7 +236,7 @@ def get_case_items(cases):
     return enumerate(cases, 1)
 
 def analyze_case(c_id, c_data, filters):
-    p = get_mat(c_data)             # 리스트, 행렬 데이터를 반환
+    p = get_mat(c_data)             # 리스트, 행렬 데이터를 반환, 합성곱을 할 대상
     if p is None:
         raise ValueError("패턴 행렬을 찾을 수 없습니다.")
 
@@ -267,17 +267,17 @@ def analyze_case(c_id, c_data, filters):
     
     res_tag = "PASS" if pred == exp else "FAIL"      # 판정결과 패턴 라벨과 일치시 pass, 아니면 fail
 
-    return {
-        "c_id": c_id,
-        "name": name,
-        "size": size,
-        "expected": exp,
-        "pred": pred,
-        "res_tag": res_tag,
-        "sc": sc,
-        "sx": sx,
-        "time_ms": t,
-        "ops": ops,
+    return {                                        # 결과를 딕셔너리로 반환
+        "c_id": c_id,                               # 패턴 인덱스
+        "name": name,                               # 케이스 이름
+        "size": size,                               # 패턴 크기
+        "expected": exp,                            # 패턴의 판정 기준
+        "pred": pred,                               # 판정결과
+        "res_tag": res_tag,                         # PASS/FAIL
+        "sc": sc,                                   # cross 필터 점수
+        "sx": sx,                                   # x 필터 점수
+        "time_ms": t,                               # 평균 실행시간(ms)
+        "ops": ops,                                 # 연산횟수 N^2
     }
 
 def print_case_result(result):
@@ -300,7 +300,7 @@ def run_json_mode():
     data = load_json_data("data.json")
     if data is None:
         return
-    filters, cases = get_filters_and_cases(data)
+    filters, cases = get_filters_and_cases(data)                # json 데이터에서 필터와 케이스를 가져옴
 
     if filters is None:                                         # 필터가 없으면 오류 메시지 출력 후 종료
         print("오류: filters 데이터가 없습니다.")
@@ -309,8 +309,8 @@ def run_json_mode():
     if not cases:                                               # 패턴이 없으면 오류 메시지 출력 후 종료
         print("오류: patterns(cases) 데이터가 없습니다.")
         return
-    available_sizes = collect_available_sizes(filters)
-    print_loaded_filters(available_sizes)
+    available_sizes = collect_available_sizes(filters)          # 필터 size를 수집하여 집합으로 반환
+    print_loaded_filters(available_sizes)                       # [1] 필터로드
     
     print("\n# [2] 패턴 분석 (라벨 정규화 적용)")
 
@@ -321,8 +321,8 @@ def run_json_mode():
 
     for c_id, c_data in get_case_items(cases):         # 키(인덱스), 데이터 in 케이스(패턴)
         try:
-            result = analyze_case(c_id, c_data, filters)
-            print_case_result(result)
+            result = analyze_case(c_id, c_data, filters)    # 결과를 딕셔너리로 반환
+            print_case_result(result)                       # 딕셔너리를 인자로 받아 케이스 결과 출력
 
             if result["res_tag"] == "PASS":
                 pass_cnt += 1
@@ -336,7 +336,7 @@ def run_json_mode():
                 failed_details.append(f"- {result['name']}: {reason}")    # 실패 케이스 정리용
             update_perf_map(perf_map, result["size"],result["time_ms"],result["ops"])
         except Exception as e:
-            handle_case_error(c_id, e)
+            handle_case_error(c_id, e)                      # 오류가 난 케이스만 건너 뛰고 실행하도록 처리
 
     print_perf_table(perf_map)
     print_result_summary(pass_cnt, fail_cnt, failed_details)
