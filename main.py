@@ -3,7 +3,7 @@ import re               # data 필터 크기 비교
 import time             # 시간
 
 EPS = 1e-9              # 부동소수점 오차 방지 
-REPEAT = 10
+REPEAT = 10             # 최소기준 10회 반복측정 후 평균시간
 USER_SIZE = 3           # 사용자 입력값 변경시 반영
 
 

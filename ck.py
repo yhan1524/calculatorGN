@@ -1,6 +1,6 @@
-import json
 
-with open("data.json", "r", encoding="utf-8") as f:     # data 파일로드
-    data = json.load(f)
+a = 1*1
+b = 1.0000000001*1
 
-print(data)
+print(a == b)  # False
+print(abs(a - b) < 1e-9)  # True
